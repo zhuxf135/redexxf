@@ -74,7 +74,7 @@ jobs:
 
   pr-comment:
     needs: [ast-scan]
-    if: ${{ github.event.pull_request }}
+    # if: ${{ github.event.pull_request }}
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
