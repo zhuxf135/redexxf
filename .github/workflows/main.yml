@@ -93,11 +93,10 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const prNumber = ${{ github.event.pull_request.number }};
             const fs = require('fs');
             const summary = fs.readFileSync('scan-summary.md', 'utf8');
             github.rest.issues.createComment({
-              issue_number: prNumber,
+              issue_number: ${{ github.event.pull_request.number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `## CodeGuard Scan Results\n${summary}`
