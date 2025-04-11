@@ -35,7 +35,7 @@ jobs:
         run: |
           # Simplified result processing
           echo "Generating report files..."
-          echo "## Scan Summary" > scan-summary.md
+          echo "## Scan Summary22222" > scan-summary.md
           echo "Detailed results available in wiki 1111111 22223334445555" >> scan-summary.md
           echo "TRUE" > result.txt
 
