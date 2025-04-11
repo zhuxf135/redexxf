@@ -36,7 +36,7 @@ jobs:
           # Simplified result processing
           echo "Generating report files..."
           echo "## Scan Summary" > scan-summary.md
-          echo "Detailed results available in wiki" >> scan-summary.md
+          echo "Detailed results available in wiki 1111111" >> scan-summary.md
           echo "TRUE" > result.txt
 
       - name: Upload artifacts
@@ -93,7 +93,8 @@ jobs:
             const fs = require('fs');
             const summary = fs.readFileSync('scan-summary.md', 'utf8');
             github.rest.issues.createComment({
-              issue_number: context.issue.number,
+              #issue_number: context.issue.number,
+              issue_number: 1
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `## CodeGuard Scan Results\n${summary}`
