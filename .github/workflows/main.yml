@@ -80,6 +80,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
+    
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -92,10 +93,11 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const prNumber = ${{ github.event.pull_request.number }};
             const fs = require('fs');
             const summary = fs.readFileSync('scan-summary.md', 'utf8');
             github.rest.issues.createComment({
-              issue_number: context.issue.number,
+              issue_number: prNumber,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `## CodeGuard Scan Results\n${summary}`
