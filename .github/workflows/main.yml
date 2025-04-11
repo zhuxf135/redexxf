@@ -9,23 +9,11 @@ env:
   ENGINES: "sast,sca,kics"
 
 on:
-  workflow_call:
-    inputs:
-      groups:
-        required: true
-        type: string
-      production-branch:
-        required: true
-        type: string
-      cmdb:
-        required: false
-        type: string
-        default: ""
-    secrets:
-      CX_CLIENT_AUTH_ID:
-        required: true
-      CX_CLIENT_AUTH_SECRET:
-        required: true
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   ast-scan:
