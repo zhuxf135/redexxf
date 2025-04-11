@@ -31,20 +31,6 @@ jobs:
             echo "TAG_PROJECT=$TAG_PROJECT,CMDB:${{ inputs.cmdb }}" >> $GITHUB_ENV
           fi
 
-      - name: Run Checkmarx scan
-        uses: DevOps/ast-github-action@2.0.36
-        with:
-          base_uri: ${{ env.CX_BASE_URI }}
-          cx_tenant: ${{ env.CX_TENANT }}
-          cx_client_id: ${{ secrets.CX_CLIENT_AUTH_ID }}
-          cx_client_secret: ${{ secrets.CX_CLIENT_AUTH_SECRET }}
-          project_name: ${{ github.repository }}
-          branch: ${{ env.BRANCH_NAME }}
-          additional_params: ${{ env.TAG_SCAN }} --scan-types ${{ env.ENGINES }} --project-tags ${{ env.TAG_PROJECT }} --project-groups ${{ inputs.groups }} --report-format summaryJSON --async
-
-      - name: Get Scan ID
-        run: echo "SCAN_ID=$(jq -r '.ScanID' cx_result.json)" >> $GITHUB_ENV
-
       - name: Process scan results
         run: |
           # Simplified result processing
