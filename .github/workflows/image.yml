@@ -155,7 +155,7 @@ jobs:
           curl  -o image-scan-summary-result.md -X  GET '${{env.CX_BASE_URI}}/download/${{env.IMAGE_ID}}?summary=true'
 
       - name: 'Upload report artifact'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v2
         with:
           name: scan-results-artifact
           path: |
