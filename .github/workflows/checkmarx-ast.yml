@@ -40,7 +40,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
             echo "Token length: ${#GITHUB_TOKEN}"
-            SCOPES=$(curl -v "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user)
+            SCOPES=$(curl -v "Authorization: token $GITHUB_TOKEN" https://api.github.com/user)
             echo "Scopes: $SCOPES"
             curl -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
