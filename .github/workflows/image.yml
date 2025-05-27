@@ -110,7 +110,7 @@ jobs:
           REPO=${{ github.event.repository.name }}
           ORGA=${{ github.repository_owner }}
           REPO_FULL_NAME="$ORGA/$REPO"
-          JSON_PAYLOAD="{\"project_name\":\"$REPO_FULL_NAME\",\"image_name\":\"${{ IMAGE_NAME }}\",\"image_id\":\"${{ IMAGE_ID }}\"}"
+          JSON_PAYLOAD="{\"project_name\":\"$REPO_FULL_NAME\",\"image_name\":\"${{ env.IMAGE_NAME }}\",\"image_id\":\"${{ env.IMAGE_ID }}\"}"
           RESPONSE=$(curl --request POST "${{ env.CX_BASE_URI }}/task/" --header 'Content-Type: application/json' --data-raw "$JSON_PAYLOAD")
           echo "response: $RESPONSE"
           TASK_ID=$(echo "$RESPONSE" | jq -r '.task_id')
@@ -148,8 +148,8 @@ jobs:
       - name: Download Markdown File
         if: env.TASK_ID != ''
         run: |
-          curl -o image-scan-result.md -X  GET '${{env.CX_BASE_URI}}/download/${{IMAGE_ID}}'
-          curl  -o image-scan-summary-result.md -X  GET '${{env.CX_BASE_URI}}/download/${{IMAGE_ID}}?summary=true'
+          curl -o image-scan-result.md -X  GET '${{env.CX_BASE_URI}}/download/${{env.IMAGE_ID}}'
+          curl  -o image-scan-summary-result.md -X  GET '${{env.CX_BASE_URI}}/download/${{env.IMAGE_ID}}?summary=true'
 
       - name: 'Upload report artifact'
         uses: actions/upload-artifact@v3
