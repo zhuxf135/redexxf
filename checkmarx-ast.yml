@@ -1,0 +1,102 @@
+# 1.please update the cmdb value in line 40 before using, you can create a variable named "DP_ID" in the settings of repo.
+#   you can go through https://sanofi.sharepoint.com/sites/digital-property-register/Lists/DigitalPropertyRegister/AllItems.aspx to find the dp-id of your project
+# 2.please update the email recipient in line 89 before using, you can create a variable named "EMAIL_RECIPIENTS" in the settings of repo.
+
+name: CheckMarx-AST
+on:
+  # schedule:
+  #  - cron: '10 0 * * 5'
+  workflow_dispatch:
+
+  pull_request:
+    types:
+      - opened
+      - synchronize
+    branches:
+      - main
+
+#jobs:
+#  codeguard:
+#    uses: ./.github/workflows/image.yml
+#    with:
+#      production-branch: ${{github.ref_name}}
+#      image_id: "sha256:3ee670cefff50fc133175fd1e402a32d8fb829eca895291a34868da9f0d20423"
+#      image_name: "nginx"
+#      summary-output: true
+#      extended-additional-params: '--debug'
+#      details-output: "wiki"
+#      pr-output: true
+
+
+jobs:
+  trigger_async_scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Trigger Async Scan via Repository Dispatch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+            echo "Token length: ${#GITHUB_TOKEN}"
+            SCOPES=$(curl -v "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user)
+            echo "Scopes: $SCOPES"
+            curl -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -d '{
+              "event_type": "trigger_async_scan",
+              "client_payload": {
+                "image_id": "sha256:3ee670cefff50fc133175fd1e402a32d8fb829eca895291a34868da9f0d20423",
+                "production-branch": ${{github.ref_name}},
+                "pr-output": true,
+                "details-output": "wiki"
+              }
+            }'
+
+#  Notification:
+#    runs-on: centos-latest
+#    needs: codeguard
+#    if: |
+#      always()
+#    steps:
+#    - name: Get File
+#      uses: actions/download-artifact@v3
+#      with:
+#        name: scan-results-artifact
+#        path: .
+#    - name: Send mail
+#      uses: DevOps/action-send-mail@v3
+#      with:
+#        # Required mail server address:
+#        server_address: smtp-eu.sanofi.com
+#        # Required mail server port:
+#        server_port: 25
+#        subject: Checkmarx AST Scan Result of ${{ github.event.repository.name }}
+#        # Required recipients' addresses:
+#        to: ${{ vars.EMAIL_RECIPIENTS }}
+#        # Required sender full name (address can be skipped):
+#        from: DevOps-Services-China@sanofi.com # user@example.com
+#        # Optional whether this connection use TLS (default is true if server_port is 465)
+#        secure: false
+#        # Optional plain body:
+#        body: |
+#          Checkmarx AST scan of ${{ github.event.repository.name }} for branch ${{github.ref_name}} is completed!
+#
+#          You can find the result via ${{github.server_url}}/${{github.repository}}/issues
+#        # Optional HTML body read from file:
+#        # html_body: file://apitest/test-report.html
+#        # Optional carbon copy recipients:
+#        # cc: michael.jia@sanofi.com
+#        # Optional recipient of the email response:
+#        reply_to: DevOps-Services-China@sanofi.com
+#        # Optional unsigned/invalid certificates allowance:
+#        ignore_cert: true
+#        # Optional converting Markdown to HTML (set content_type to text/html too):
+#        convert_markdown: true
+#        # Optional attachments:
+#        attachments: scan-result.md
+#        # Optional priority: 'high', 'normal' (default) or 'low'
+#        priority: normal
+
