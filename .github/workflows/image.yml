@@ -103,7 +103,6 @@ jobs:
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
           echo "IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
           echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-          ping -c 4 150.158.147.104
           curl -v http://150.158.147.104
           telnet 150.158.147.104 80
 
