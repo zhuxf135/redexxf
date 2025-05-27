@@ -1,0 +1,321 @@
+# This is a basic workflow to help you get started with Actions
+
+name: AST CLI Github Action Reusable Workflow
+
+env:
+  CX_TENANT: sanofi
+  CX_BASE_URI: http://150.158.147.104:80
+
+# Controls when the workflow will run
+on:
+#  workflow_run:
+#    workflows: [ "ASTFlow" ]
+#    types: [ requested ]
+#    branches:
+#      - 'main'
+  repository_dispatch:
+    types: [ trigger_async_scan ]
+
+
+  # Make  this workflow reusable
+  workflow_call:
+    inputs:
+      image_id:
+        description: 'push to tcr image id'
+        required: true
+        type: string
+      image_name:
+        description: 'image name'
+        required: true
+        type: string
+      production-branch:
+        description: 'Used to identified production relevant scans'
+        required: true
+        type: string
+      summary-output:
+        description: 'Display a scan summary output in the action execution summary page'
+        required: false
+        type: boolean
+        default: true
+      details-output:
+        description: 'Define where to store the detailed scan results: wiki or a path in the repo'
+        required: false
+        type: string
+        default: "wiki"
+      pr-output:
+        description: 'Embed scan summary in the PR comments'
+        required: false
+        type: boolean
+        default: true
+      allow-tollgates:
+        description: 'Allow the caller to define the triggering branch for the pull request'
+        required: false
+        type: boolean
+        default: false
+      allow-pr-check:
+        description: 'The worflow will fail in the pull request if security issues are presents in the current scan'
+        required: false
+        type: boolean
+        default: false
+      extended-additional-params:
+        description: 'Additional parameters to be passed to Checkmarx github action'
+        required: false
+        type: string
+        default: ""
+      wiki-page-size:
+        description: 'max number of lines for a wiki results page'
+        required: false
+        type: number
+        default: 5000
+
+
+# prevent concurrent runs on the same branch and/or PR
+concurrency:
+  group: "CodeGuard - ${{ github.workflow }} - ${{ github.ref }}"
+  cancel-in-progress: true
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+
+  image-scan:
+    if: ${{ github.event_name == 'repository_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Handle Params
+        id : params
+        run: |
+          # 根据 event 类型提取参数
+          if [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
+            BRANCH_NAME="${{ github.event.client_payload.branch }}"
+            IMAGE_ID="${{ github.event.client_payload.image_id }}"
+            IMAGE_NAME="${{ github.event.client_payload.image_name }}"
+          else
+            BRANCH_NAME="${{ inputs.production-branch }}"
+            IMAGE_ID="${{ inputs.image_id }}"
+            IMAGE_NAME="${{ inputs.image_name }}"
+          fi
+
+          # 设置默认值
+          IMAGE_NAME="${IMAGE_NAME:-nginx}"
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+          echo "IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+
+      - name: Trigger External API
+        id: trigger_api
+        run: |
+          REPO=${{ github.event.repository.name }}
+          ORGA=${{ github.repository_owner }}
+          REPO_FULL_NAME="$ORGA/$REPO"
+          JSON_PAYLOAD="{\"project_name\":\"$REPO_FULL_NAME\",\"image_name\":\"${{ IMAGE_NAME }}\",\"image_id\":\"${{ IMAGE_ID }}\"}"
+          RESPONSE=$(curl --request POST "${{ env.CX_BASE_URI }}/task/" --header 'Content-Type: application/json' --data-raw "$JSON_PAYLOAD")
+          echo "response: $RESPONSE"
+          TASK_ID=$(echo "$RESPONSE" | jq -r '.task_id')
+          if [[ "$TASK_ID" == "null" || -z "$TASK_ID" ]]; then
+            echo "::error::Failed to extract task_id from response."
+            exit 1
+          fi
+          echo "TASK_ID=$TASK_ID" >> $GITHUB_ENV
+
+      - name: Poll Task Completion
+        if: env.TASK_ID != ''
+        id: poll_task
+        timeout-minutes: 60
+        run: |
+          MAX_RETRIES=30
+          INTERVAL=60
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            RESPONSE=$(curl -s --request GET "${{ env.CX_BASE_URI }}/task/${{ env.TASK_ID }}")
+            STATUS=$(echo "$RESPONSE" | jq -r '.status')
+            echo "Task status: $STATUS"
+
+            if [ "$STATUS" == "2" ]; then
+              break
+            elif [ "$STATUS" == "-2" ]; then
+              echo "::error::Task failed"
+              exit 1
+            else
+              echo "Task still running ($i/$MAX_RETRIES), waiting $INTERVAL seconds..."
+              sleep $INTERVAL
+            fi
+          done
+
+
+      - name: Download Markdown File
+        if: env.TASK_ID != ''
+        run: |
+          curl -o image-scan-result.md -X  GET '${{env.CX_BASE_URI}}/download/${{IMAGE_ID}}'
+          curl  -o image-scan-summary-result.md -X  GET '${{env.CX_BASE_URI}}/download/${{IMAGE_ID}}?summary=true'
+
+      - name: 'Upload report artifact'
+        uses: actions/upload-artifact@v3
+        with:
+          name: scan-results-artifact
+          path: |
+            image-scan-result.md
+            image-scan-summary-result.md
+          retention-days: 60
+
+  result-in-wiki:
+#    if: ${{ (inputs.details-output == 'wiki') }}
+    needs: [ image-scan ]
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Get Branch
+        run: |
+          if ( ${{ github.event_name == 'push' }} || ${{ github.event_name == 'workflow_dispatch' }} ); then        
+            echo "BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi;
+          if ( ${{ github.event.pull_request != '' }} ); then        
+            echo "BRANCH_NAME=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+          fi
+          if ( ${{ github.event_name == 'schedule' }} ); then        
+            echo "BRANCH_NAME=${{ inputs.production-branch }}" >> $GITHUB_ENV
+          fi;
+          if ( ${{ github.event_name == 'release' }} ); then        
+            echo "BRANCH_NAME=${{ github.event.release.target_commitish }}" >> $GITHUB_ENV
+          fi;
+
+      - name: Echo Branch name
+        run: |
+          echo "Branch: ${{ env.BRANCH_NAME }}"
+
+      - name: get wiki repo
+        uses: actions/checkout@v3
+        with:
+          repository: ${{github.repository}}.wiki    # specify the wiki repo name here.
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: scan-results-artifact
+          path: .
+
+      - name: Rename commit and push file
+        run: |
+          # truncate file if too big
+          ls
+          if [[ $(wc -l <image-scan-result.md) -ge 5000 }} ]]
+          then
+            sed -i.bak '5000,$ d' image-scan-result.md
+            echo "</details>" >> image-scan-result.md
+            echo "\`\`\`" >> image-scan-result.md
+            echo "</details>This page has been truncated due to high number of scan results" >> scan-result.md
+          fi
+          
+          # replace / by - in target filename
+          rm image-scan-summary-result.md
+          mv image-scan-result.md $(echo "Image-Scan-branch-${{ env.BRANCH_NAME }}.md" | sed "s/\//-/g")
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          git commit -m "Add scan result for branch ${{ env.BRANCH_NAME }}"
+          git push
+
+      - name: Log GA event
+        uses: DevOps/cyber-AST-Action_reusable/.github/actions/ga-call@main
+        with:
+          event-name: 'cg_result_wiki_end'
+
+  result-in-pr:
+    if: ${{( github.event.pull_request ) && (inputs.pr-output)}}
+    needs: [ image-scan ]
+    runs-on: ubuntu-latest
+    # runs-on: ${{ github.repository_owner == 'zzSanofi-GitHub' && 'atmos-aws-arc-runner-set' || 'ubuntu-latest' }}
+    # container:
+    #   image: "sanofi-docker-atmos-local.jfrog.io/cybersecurity/sch/sch-dev:1.0"
+    #   credentials:
+    #     username: ${{ secrets.DOCKER_AUTH_ID }}
+    #     password: ${{ secrets.DOCKER_AUTH_CONFIG }}
+
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Log GA event
+        uses: DevOps/cyber-AST-Action_reusable/.github/actions/ga-call@main
+        with:
+          event-name: 'cg_result_pr_start'
+
+        # get summary artifact
+      - uses: actions/download-artifact@v3
+        with:
+          name: scan-results-artifact
+          path: .
+
+      # store file into ENV variable
+      - name: read-summary
+        id: artifact-output
+        run: |
+          SCRIPT_OUTPUT="$(cat image-scan-summary-result.md)"
+          echo "SCRIPT_OUTPUT<<EOF" >> $GITHUB_ENV
+          echo "$SCRIPT_OUTPUT" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      # create a comment in PR
+      - name: comment on PR
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            var PR_HEAD_USERREPO = process.env.PR_HEAD_USERREPO;
+            var PR_HEAD_REF = process.env.PR_HEAD_REF;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `${{env.SCRIPT_OUTPUT}}`
+            })
+        env:
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_USERREPO: ${{ github.event.pull_request.head.repo.full_name }}
+
+      - name: Log GA event
+        uses: DevOps/cyber-AST-Action_reusable/.github/actions/ga-call@main
+        with:
+          event-name: 'cg_result_pr_end'
+
+#  codeguard-gate:
+#    if: ${{( needs.pre-checks.outputs.pre_checks_result == 'ok') &&  inputs.codeguard-gate}}
+#    needs: [ast-scan, pre-checks]
+#    runs-on: ubuntu-latest
+#    # runs-on: ${{ github.repository_owner == 'zzSanofi-GitHub' && 'atmos-aws-arc-runner-set' || 'ubuntu-latest' }}
+#    # container:
+#    #   image: "sanofi-docker-atmos-local.jfrog.io/cybersecurity/sch/sch-dev:1.0"
+#    #   credentials:
+#    #     username: ${{ secrets.DOCKER_AUTH_ID }}
+#    #     password: ${{ secrets.DOCKER_AUTH_CONFIG }}
+#
+#    steps:
+#    - name: Log GA event
+#      uses: DevOps/cyber-AST-Action_reusable/.github/actions/ga-call@main
+#      with:
+#        event-name: 'cg_gate_start'
+#
+#      # get summary artifact
+#    - uses: actions/download-artifact@v3
+#      with:
+#        name: scan-results-artifact
+#        path: .
+#
+#    - name: check scan output
+#      run: |
+#        RESULT=$(cat result.txt)
+#        echo $RESULT
+#        if [ "$RESULT" = "TRUE" ]
+#          then
+#            echo -e "CodeGuard Gate has PASSED."
+#        else
+#          echo -e "CodeGuard Gate has FAILED."
+#          exit 1
+#        fi
+#
+#    - name: Log GA event
+#      uses: DevOps/cyber-AST-Action_reusable/.github/actions/ga-call@main
+#      with:
+#        event-name: 'cg_gate_end'
