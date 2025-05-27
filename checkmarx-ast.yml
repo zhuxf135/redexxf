@@ -49,7 +49,7 @@ jobs:
               "event_type": "trigger_async_scan",
               "client_payload": {
                 "image_id": "sha256:3ee670cefff50fc133175fd1e402a32d8fb829eca895291a34868da9f0d20423",
-                "production-branch": ${{github.ref_name}},
+                "production-branch": "${{github.ref_name}}",
                 "pr-output": true,
                 "details-output": "wiki"
               }
