@@ -34,6 +34,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      artifact: write
     steps:
       - name: Trigger Async Scan via Repository Dispatch
         env:
