@@ -79,6 +79,9 @@ jobs:
 
   image-scan:
     if: ${{ github.event_name == 'repository_dispatch' }}
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
